@@ -2,17 +2,25 @@
 
 <script setup>
 
-defineProps([
-  "modelValue", "max", "min"
-])
 
-defineEmits(['update:modelValue'])
+defineProps({
+  modelValue: Number, max: Number, min: Number
+}
+)
+
+const emit = defineEmits(['update:modelValue'])
+
+function inpevent(event) {
+  let v = parseFloat(event.target.value)
+
+  emit('update:modelValue', v)
+
+}
 
 </script>
 <template>
   <div>
-    <input :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" orient="vertical" type="range"
-      :min="min" :max="max" />
+    <input :value="modelValue" @input="inpevent($event)" orient="vertical" type="range" :min="min" :max="max" />
   </div>
 
 </template>

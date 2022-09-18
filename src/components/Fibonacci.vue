@@ -3,11 +3,14 @@ import { ref, watch } from 'vue'
 import Slider from "primevue/slider"
 import Knob from "primevue/knob"
 import Chart from "primevue/chart"
+import Tag from 'primevue/tag';
+
 import Button from "primevue/button"
 import Card from 'primevue/card';
 import VSlider from './vSlider.vue';
 import * as Tone from 'tone'
 
+/*
 const basicOptions = ref(
   {
     animation: false,
@@ -47,7 +50,7 @@ const basicData = ref({
     }
   ]
 });
-
+*/
 Number.prototype.mapValues = function (in_min, in_max, out_min, out_max) {
   return (this - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
@@ -79,7 +82,7 @@ async function startAudio() {
   audioStarted.value = true
 
 
-  for (let index = 0; index < maxArmonicos; index++) {
+  for (let index = 0; index < maxArmonicos + 1; index++) {
     const synt = new Tone.MonoSynth({
       oscillator: {
         type: "sine"
@@ -93,9 +96,10 @@ async function startAudio() {
     synt.volume.value = -100
     synt.triggerAttack(440)
 
-    panVol.pan.value = index.mapValues(0, maxArmonicos - 1, -1, 1)
+    panVol.pan.value = index.mapValues(0, maxArmonicos, -1, 1)
     panVolArr[index] = panVol
     syntArr[index] = synt
+
   }
   cantArmonicos.value = 2
 
@@ -112,6 +116,7 @@ watch(multiplicador, async () => {
   calcular()
 })
 watch(fundamental, async () => {
+
   calcular()
 })
 watch(offset, async () => {
@@ -126,20 +131,23 @@ function setVolumes() {
 function calcular() {
 
 
-  basicData.value.labels = []
+  //basicData.value.labels = []
+  syntArr[0].frequency.value = fundamental.value
+  syntArr[0].volume.value = volume.value
 
   for (let i = 0; i < cantArmonicos.value; i++) {
-    let v = (fibonacci(i + 1 + parseInt(offset.value)) * parseInt(multiplicador.value)) + parseInt(fundamental.value)
+    let v = parseFloat(fibonacci(i + 1 + parseFloat(offset.value))) * parseFloat(multiplicador.value) + parseFloat(fundamental.value)
+    //console.log(v)
     armonicos.value[i] = v
     if (audioStarted.value) {
-      basicData.value.labels[i] = v
-      syntArr[i].frequency.value = v
-      syntArr[i].volume.value = volume.value
-      panVolArr[i].pan.value = i.mapValues(0, cantArmonicos.value, -1, 1)
+      //basicData.value.labels[i] = v
+      syntArr[i + 1].frequency.value = v
+      syntArr[i + 1].volume.value = volume.value
+      panVolArr[i + 1].pan.value = i.mapValues(0, cantArmonicos.value, -1, 1)
     }
   }
 
-  for (let index = cantArmonicos.value; index < syntArr.length; index++) {
+  for (let index = cantArmonicos.value + 1; index < syntArr.length; index++) {
     syntArr[index].volume.value = -100
   }
 }
@@ -153,7 +161,7 @@ function calcular() {
       <div class="gap-3 card-container blue-container flex align-items-center justify-content-start">
         <Card class="flex">
           <template #content>
-            <p>Fundamental {{fundamental}}</p>
+            <p>Fund {{fundamental}}</p>
             <VSlider v-model="fundamental" :min="80" :max="3000"></VSlider>
           </template>
         </Card>
@@ -165,8 +173,8 @@ function calcular() {
         </Card>
         <Card class="flex">
           <template #content>
-            <p>Multiplicador {{multiplicador}}</p>
-            <VSlider v-model="multiplicador" :min="1" :max="300"></VSlider>
+            <p>Mult {{multiplicador}}</p>
+            <VSlider v-model="multiplicador" :min=1 :max=60 step=0.1></VSlider>
           </template>
         </Card>
         <Card class="flex">
@@ -185,7 +193,8 @@ function calcular() {
     </div>
 
     <div>
-      <Chart type="bar" :data="basicData" :options="basicOptions" />
+      <Tag class="mr-2" v-for="item in armonicos">{{item}} </Tag>
+      <!--Chart type="bar" :data="basicData" :options="basicOptions" /-->
 
     </div>
   </div>
