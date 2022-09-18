@@ -6,7 +6,7 @@ import Fibonacci from './components/Fibonacci.vue'
   <div>
 
   </div>
-  <Fibonacci msg="Fibo" />
+  <Fibonacci />
 </template>
 
 <style scoped>
