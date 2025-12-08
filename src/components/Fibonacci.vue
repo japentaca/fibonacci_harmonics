@@ -25,6 +25,13 @@ let syntArr = []
 let panVolArr = []
 let arpeggiatorOsc = null
 let arpeggiatorGain = null
+let arpeggiatorOscillators = [] // Array para múltiples osciladores del arpegiador
+let arpeggiatorPanners = [] // Array para los paneadores stereo
+let arpeggiatorGains = [] // Array para los nodos de ganancia
+let arpeggiatorEnvelopes = [] // Array para los envelopes ADSR
+const maxArpeggiatorOscillators = 8 // Número máximo de osciladores para el arpegiador
+const arpeggioAttack = 0.01 // Tiempo de ataque para evitar clicks
+const arpeggioRelease = 0.05 // Tiempo de release para transiciones suaves
 
 
 const oscillatorTypes = []
@@ -88,6 +95,12 @@ watch(cantArmonicos, async () => {
 })
 watch(volume, async () => {
   setVolumes()
+  // Actualizar también los envelopes del arpegiador si están activos
+  if (arpeggiatorActive.value && arpeggiatorEnvelopes.length > 0) {
+    arpeggiatorEnvelopes.forEach(envelope => {
+      envelope.sustain = Tone.dbToGain(volume.value)
+    })
+  }
 })
 watch(multiplicador, async () => {
   calcular()
@@ -103,11 +116,15 @@ watch(oscillatorType, async () => {
   for (let index = 0; index < syntArr.length; index++) {
     syntArr[index].type = oscillatorType.value
   }
-  // Actualizar también el oscilador del arpegiador si existe
+  // Actualizar también los osciladores del arpegiador si existen
+  arpeggiatorOscillators.forEach(osc => {
+    osc.type = oscillatorType.value
+  })
+  // Actualizar oscilador antiguo (para compatibilidad)
   if (arpeggiatorOsc) {
     arpeggiatorOsc.type = oscillatorType.value
   }
- })
+})
 watch(arpeggiatorType, async () => {
   // Reiniciar el arpegiador si está activo
   if (arpeggiatorActive.value) {
@@ -118,8 +135,8 @@ watch(arpeggiatorType, async () => {
 watch(arpeggiatorTempo, async () => {
   // Reiniciar el arpegiador si está activo para aplicar el nuevo tempo
   if (arpeggiatorActive.value) {
-    stopArpeggiator()
-    startArpeggiator()
+    const tempoBPM = 60000 / arpeggiatorTempo.value // Convertir ms a BPM
+    Tone.Transport.bpm.value = tempoBPM
   }
 })
 watch(cantArmonicos, async () => {
@@ -185,44 +202,84 @@ function startArpeggiator() {
   currentArpeggioIndex = 0
   arpeggioDirection = 1
   
-  // Crear oscilador dedicado para el arpegiador si no existe
-  if (!arpeggiatorOsc) {
-    arpeggiatorOsc = new Tone.Oscillator(440, oscillatorType.value)
-    arpeggiatorGain = new Tone.Gain(0).toDestination()
-    arpeggiatorOsc.connect(arpeggiatorGain)
-    arpeggiatorOsc.start()
+  // Crear múltiples osciladores para el arpegiador si no existen
+  if (arpeggiatorOscillators.length === 0) {
+    for (let i = 0; i < maxArpeggiatorOscillators; i++) {
+      const osc = new Tone.Oscillator(440, oscillatorType.value)
+      const envelope = new Tone.AmplitudeEnvelope({
+        attack: arpeggioAttack,
+        decay: 0.1,
+        sustain: Tone.dbToGain(volume.value),
+        release: arpeggioRelease
+      })
+      const panner = new Tone.Panner(0).toDestination()
+      
+      // Distribuir los osciladores en el espectro stereo
+      panner.pan.value = i.mapValues(0, maxArpeggiatorOscillators - 1, -1, 1)
+      
+      osc.connect(envelope)
+      envelope.connect(panner)
+      osc.start()
+      
+      arpeggiatorOscillators.push(osc)
+      arpeggiatorPanners.push(panner)
+      arpeggiatorEnvelopes.push(envelope)
+    }
   }
   
-  // Actualizar el tipo de oscilador
-  arpeggiatorOsc.type = oscillatorType.value
+  // Actualizar el tipo de oscilador para todos los osciladores
+  arpeggiatorOscillators.forEach(osc => {
+    osc.type = oscillatorType.value
+  })
   
-  // Tempo del arpegiador basado en el slider
-  arpeggiatorInterval = setInterval(() => {
-    playArpeggioNote()
-  }, arpeggiatorTempo.value)
+  // Configurar el tempo usando Tone.Transport
+  const tempoBPM = 60000 / arpeggiatorTempo.value // Convertir ms a BPM
+  Tone.Transport.bpm.value = tempoBPM
+  
+  // Programar el evento del arpegiador
+  arpeggiatorInterval = Tone.Transport.scheduleRepeat((time) => {
+    playArpeggioNote(time)
+  }, '8n') // Usar corcheas para mejor timing
+  
+  // Iniciar el transporte si no está corriendo
+  if (Tone.Transport.state !== 'started') {
+    Tone.Transport.start()
+  }
 }
 
 function stopArpeggiator() {
-  if (arpeggiatorInterval) {
-    clearInterval(arpeggiatorInterval)
+  if (arpeggiatorInterval !== null) {
+    Tone.Transport.clear(arpeggiatorInterval)
     arpeggiatorInterval = null
   }
   
-  // Apagar el volumen del arpegiador
-  if (arpeggiatorGain) {
-    arpeggiatorGain.gain.value = 0
-  }
+  // Apagar todos los envelopes del arpegiador
+  arpeggiatorEnvelopes.forEach(envelope => {
+    envelope.triggerRelease()
+  })
 }
 
-function playArpeggioNote() {
-  if (armonicos.value.length === 0 || !arpeggiatorOsc || !arpeggiatorGain) return
+function playArpeggioNote(time) {
+  if (armonicos.value.length === 0 || arpeggiatorOscillators.length === 0) return
   
-  // Encender la nota actual del arpegio usando el oscilador dedicado
+  // Seleccionar un oscilador basado en el índice actual para distribuir en stereo
+  const oscillatorIndex = currentArpeggioIndex % arpeggiatorOscillators.length
+  const currentOscillator = arpeggiatorOscillators[oscillatorIndex]
+  const currentEnvelope = arpeggiatorEnvelopes[oscillatorIndex]
+  
+  // Apagar todos los envelopes primero para evitar superposición
+  arpeggiatorEnvelopes.forEach((envelope, index) => {
+    if (index !== oscillatorIndex) {
+      envelope.triggerRelease(time)
+    }
+  })
+  
+  // Encender la nota actual del arpegio usando el oscilador seleccionado
   const currentFreq = armonicos.value[currentArpeggioIndex]
-  if (currentFreq) {
-    arpeggiatorOsc.frequency.value = currentFreq
-    arpeggiatorOsc.type = oscillatorType.value
-    arpeggiatorGain.gain.value = Tone.dbToGain(volume.value)
+  if (currentFreq && currentOscillator && currentEnvelope) {
+    currentOscillator.frequency.setValueAtTime(currentFreq, time)
+    currentOscillator.type = oscillatorType.value
+    currentEnvelope.triggerAttack(time)
   }
   
   // Calcular el siguiente índice según el tipo de arpegio
@@ -289,9 +346,23 @@ function calcular() {
 
 // Limpiar cuando se desmonta el componente
 onUnmounted(() => {
-  if (arpeggiatorInterval) {
-    clearInterval(arpeggiatorInterval)
+  if (arpeggiatorInterval !== null) {
+    Tone.Transport.clear(arpeggiatorInterval)
   }
+  
+  // Limpiar todos los osciladores del arpegiador
+  arpeggiatorOscillators.forEach(osc => {
+    osc.stop()
+    osc.dispose()
+  })
+  arpeggiatorEnvelopes.forEach(envelope => {
+    envelope.dispose()
+  })
+  arpeggiatorOscillators = []
+  arpeggiatorPanners = []
+  arpeggiatorEnvelopes = []
+  
+  // Limpiar oscilador antiguo (para compatibilidad)
   if (arpeggiatorOsc) {
     arpeggiatorOsc.stop()
     arpeggiatorOsc.dispose()
