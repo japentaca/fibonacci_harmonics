@@ -428,9 +428,26 @@ onUnmounted(() => {
 
 </script>
 
+<style scoped>
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+  100% { transform: translateY(0px); }
+}
+
+.hero-image {
+  animation: float 6s ease-in-out infinite;
+}
+</style>
+
 <template>
   <div class="flex flex-column align-items-center justify-content-center min-h-screen p-4 surface-ground">
-    <Button v-if="!audioStarted" @click="startAudio" size="large" label="Start Audio Engine" icon="pi pi-play" class="p-button-raised p-button-lg" />
+    <div v-if="!audioStarted" class="flex flex-column align-items-center gap-4 fadein animation-duration-1000">
+      <img src="/fibonacci_harmonics/landing-hero.svg" alt="Fibonacci Harmonics Hero" class="w-20rem md:w-30rem h-auto hero-image" />
+      <h1 class="text-4xl font-bold text-primary mb-0">Fibonacci Harmonics</h1>
+      <p class="text-xl text-500 mt-0 mb-4">Explore the mathematics of sound</p>
+      <Button @click="startAudio" size="large" label="Start Audio Engine" icon="pi pi-play" class="p-button-raised p-button-lg shadow-4" rounded />
+    </div>
     
     <div v-if="audioStarted" class="w-full max-w-7 fadein animation-duration-500">
         <!-- Main Controls Header -->

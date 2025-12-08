@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" fill="none">
+  <defs>
+    <linearGradient id="heroGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#a855f7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ec4899;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background Elements -->
+  <circle cx="400" cy="300" r="200" stroke="url(#heroGradient)" stroke-width="1" stroke-opacity="0.2" />
+  <circle cx="400" cy="300" r="150" stroke="url(#heroGradient)" stroke-width="1" stroke-opacity="0.3" />
+  <circle cx="400" cy="300" r="100" stroke="url(#heroGradient)" stroke-width="1" stroke-opacity="0.4" />
+  
+  <!-- Fibonacci Spiral Representation -->
+  <path d="M400 300 
+           M400 300 L400 280
+           A 20 20 0 0 1 420 300
+           A 20 20 0 0 1 400 320
+           A 40 40 0 0 1 360 300
+           A 60 60 0 0 1 420 240
+           A 100 100 0 0 1 520 300
+           A 160 160 0 0 1 360 460" 
+        stroke="url(#heroGradient)" 
+        stroke-width="4" 
+        stroke-linecap="round"
+        filter="url(#glow)"
+        fill="none" />
+        
+  <!-- Waveforms -->
+  <path d="M200 300 Q 300 200, 400 300 T 600 300" stroke="#fff" stroke-width="2" stroke-opacity="0.5" fill="none" />
+  <path d="M200 300 Q 300 400, 400 300 T 600 300" stroke="#fff" stroke-width="2" stroke-opacity="0.5" fill="none" />
+  
+  <!-- Decorative dots -->
+  <circle cx="400" cy="300" r="4" fill="#fff" />
+  <circle cx="360" cy="300" r="2" fill="#fff" fill-opacity="0.6" />
+  <circle cx="420" cy="300" r="2" fill="#fff" fill-opacity="0.6" />
+</svg>
