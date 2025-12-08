@@ -7,6 +7,8 @@ import Card from 'primevue/card';
 import Slider from 'primevue/slider';
 import * as Tone from 'tone'
 
+const baseUrl = import.meta.env.BASE_URL
+const heroImage = `${baseUrl}landing-hero.svg`
 
 Number.prototype.mapValues = function (in_min, in_max, out_min, out_max) {
   return (this - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
@@ -443,7 +445,7 @@ onUnmounted(() => {
 <template>
   <div class="flex flex-column align-items-center justify-content-center min-h-screen p-4 surface-ground">
     <div v-if="!audioStarted" class="flex flex-column align-items-center gap-4 fadein animation-duration-1000">
-      <img src="/fibonacci_harmonics/landing-hero.svg" alt="Fibonacci Harmonics Hero" class="w-20rem md:w-30rem h-auto hero-image" />
+      <img :src="heroImage" alt="Fibonacci Harmonics Hero" class="w-20rem md:w-30rem h-auto hero-image" />
       <h1 class="text-4xl font-bold text-primary mb-0">Fibonacci Harmonics</h1>
       <p class="text-xl text-500 mt-0 mb-4">Explore the mathematics of sound</p>
       <Button @click="startAudio" size="large" label="Start Audio Engine" icon="pi pi-play" class="p-button-raised p-button-lg shadow-4" rounded />
