@@ -1,11 +1,10 @@
 <script setup>
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted, shallowRef } from 'vue'
 import Tag from 'primevue/tag';
-
 import Button from "primevue/button"
 import Dropdown from "primevue/dropdown"
 import Card from 'primevue/card';
-import VSlider from './vSlider.vue';
+import Slider from 'primevue/slider';
 import * as Tone from 'tone'
 
 
@@ -17,9 +16,14 @@ const maxArmonicos = 10
 const fundamental = ref(440)
 const cantArmonicos = ref(4)
 const multiplicador = ref(1)
-const armonicos = ref([])
+const armonicos = shallowRef([])
 const offset = ref(2)
-const volume = ref(-20)
+// Volume control state
+// 0-100 linear slider value for smoother UI control
+const volumeSlider = ref(80) 
+// Actual dB value calculated from slider
+const volumeDb = ref(-20)
+
 const audioStarted = ref(false)
 let syntArr = []
 let panVolArr = []
@@ -27,11 +31,14 @@ let arpeggiatorOsc = null
 let arpeggiatorGain = null
 let arpeggiatorOscillators = [] // Array para múltiples osciladores del arpegiador
 let arpeggiatorPanners = [] // Array para los paneadores stereo
-let arpeggiatorGains = [] // Array para los nodos de ganancia
+let arpeggiatorMasterVolume = null
 let arpeggiatorEnvelopes = [] // Array para los envelopes ADSR
 const maxArpeggiatorOscillators = 8 // Número máximo de osciladores para el arpegiador
 const arpeggioAttack = 0.01 // Tiempo de ataque para evitar clicks
 const arpeggioRelease = 0.05 // Tiempo de release para transiciones suaves
+const arpeggiatorGainBoostDB = 6
+const activeArpeggioIndex = ref(-1)
+let tempoDebounceTimer = null
 
 
 const oscillatorTypes = []
@@ -86,30 +93,35 @@ async function startAudio() {
 
   }
   cantArmonicos.value = 2
-
+  
+  // Initialize volume based on slider
+  updateVolume()
 }
 
-watch(cantArmonicos, async () => {
-  armonicos.value = []
-  calcular()
-})
-watch(volume, async () => {
+// Convert linear slider (0-100) to logarithmic dB scale
+// Range: -Infinity (mute) to -10dB (max)
+function updateVolume() {
+  const minDb = -60 // Floor for audible range
+  const maxDb = -10 // Ceiling
+  
+  if (volumeSlider.value <= 0) {
+    volumeDb.value = -Infinity
+  } else {
+    // Linear mapping for consistent sensitivity across the range
+    // Normalized (0-1) * Range + Min
+    const normalized = volumeSlider.value / 100
+    volumeDb.value = minDb + normalized * (maxDb - minDb)
+  }
+}
+
+watch(volumeSlider, async () => {
+  updateVolume()
   setVolumes()
-  // Actualizar también los envelopes del arpegiador si están activos
-  if (arpeggiatorActive.value && arpeggiatorEnvelopes.length > 0) {
-    arpeggiatorEnvelopes.forEach(envelope => {
-      envelope.sustain = Tone.dbToGain(volume.value)
-    })
+  if (arpeggiatorMasterVolume) {
+    arpeggiatorMasterVolume.volume.rampTo(volumeDb.value + arpeggiatorGainBoostDB, 0.05)
   }
 })
-watch(multiplicador, async () => {
-  calcular()
-})
-watch(fundamental, async () => {
-
-  calcular()
-})
-watch(offset, async () => {
+watch([fundamental, cantArmonicos, multiplicador, offset], () => {
   calcular()
 })
 watch(oscillatorType, async () => {
@@ -133,10 +145,24 @@ watch(arpeggiatorType, async () => {
   }
 })
 watch(arpeggiatorTempo, async () => {
-  // Reiniciar el arpegiador si está activo para aplicar el nuevo tempo
+  if (tempoDebounceTimer) {
+    clearTimeout(tempoDebounceTimer)
+  }
   if (arpeggiatorActive.value) {
-    const tempoBPM = 60000 / arpeggiatorTempo.value // Convertir ms a BPM
-    Tone.Transport.bpm.value = tempoBPM
+    tempoDebounceTimer = setTimeout(() => {
+      if (arpeggiatorInterval !== null) {
+        Tone.Transport.clear(arpeggiatorInterval)
+        arpeggiatorInterval = null
+      }
+      const intervalSeconds = arpeggiatorTempo.value / 1000
+      arpeggiatorInterval = Tone.Transport.scheduleRepeat((time) => {
+        playArpeggioNote(time)
+      }, intervalSeconds, Tone.Transport.seconds)
+      if (Tone.Transport.state !== 'started') {
+        Tone.Transport.start()
+      }
+      playArpeggioNote(Tone.now())
+    }, 500)
   }
 })
 watch(cantArmonicos, async () => {
@@ -156,7 +182,9 @@ watch(armonicos, async () => {
 })
 function setVolumes() {
   for (let index = 0; index < syntArr.length; index++) {
-    syntArr[index].volume.value = volume.value
+    if (syntArr[index]) {
+      syntArr[index].volume.rampTo(volumeDb.value, 0.05)
+    }
   }
   // Si el arpegiador está activo, apagar los osciladores principales
   if (arpeggiatorActive.value) {
@@ -167,16 +195,18 @@ function setVolumes() {
 // Funciones para controlar los osciladores principales
 function muteMainOscillators() {
   for (let index = 0; index < syntArr.length; index++) {
-    syntArr[index].volume.value = -100
+    if (syntArr[index]) {
+      syntArr[index].volume.rampTo(-100, 0.05)
+    }
   }
 }
 
 function restoreMainOscillators() {
   for (let index = 0; index < syntArr.length; index++) {
     if (index === 0 || index <= cantArmonicos.value) {
-      syntArr[index].volume.value = volume.value
+      syntArr[index].volume.rampTo(volumeDb.value, 0.05)
     } else {
-      syntArr[index].volume.value = -100
+      syntArr[index].volume.rampTo(-100, 0.05)
     }
   }
 }
@@ -204,21 +234,25 @@ function startArpeggiator() {
   
   // Crear múltiples osciladores para el arpegiador si no existen
   if (arpeggiatorOscillators.length === 0) {
+    if (!arpeggiatorMasterVolume) {
+      arpeggiatorMasterVolume = new Tone.Volume(volumeDb.value + arpeggiatorGainBoostDB).toDestination()
+    }
     for (let i = 0; i < maxArpeggiatorOscillators; i++) {
       const osc = new Tone.Oscillator(440, oscillatorType.value)
       const envelope = new Tone.AmplitudeEnvelope({
         attack: arpeggioAttack,
         decay: 0.1,
-        sustain: Tone.dbToGain(volume.value),
+        sustain: 1,
         release: arpeggioRelease
       })
-      const panner = new Tone.Panner(0).toDestination()
+      const panner = new Tone.Panner(0)
       
       // Distribuir los osciladores en el espectro stereo
       panner.pan.value = i.mapValues(0, maxArpeggiatorOscillators - 1, -1, 1)
       
       osc.connect(envelope)
       envelope.connect(panner)
+      panner.connect(arpeggiatorMasterVolume)
       osc.start()
       
       arpeggiatorOscillators.push(osc)
@@ -231,20 +265,14 @@ function startArpeggiator() {
   arpeggiatorOscillators.forEach(osc => {
     osc.type = oscillatorType.value
   })
-  
-  // Configurar el tempo usando Tone.Transport
-  const tempoBPM = 60000 / arpeggiatorTempo.value // Convertir ms a BPM
-  Tone.Transport.bpm.value = tempoBPM
-  
-  // Programar el evento del arpegiador
+  const intervalSeconds = arpeggiatorTempo.value / 1000
   arpeggiatorInterval = Tone.Transport.scheduleRepeat((time) => {
     playArpeggioNote(time)
-  }, '8n') // Usar corcheas para mejor timing
-  
-  // Iniciar el transporte si no está corriendo
+  }, intervalSeconds, Tone.Transport.seconds)
   if (Tone.Transport.state !== 'started') {
     Tone.Transport.start()
   }
+  playArpeggioNote(Tone.now())
 }
 
 function stopArpeggiator() {
@@ -257,11 +285,13 @@ function stopArpeggiator() {
   arpeggiatorEnvelopes.forEach(envelope => {
     envelope.triggerRelease()
   })
+  activeArpeggioIndex.value = -1
 }
 
 function playArpeggioNote(time) {
   if (armonicos.value.length === 0 || arpeggiatorOscillators.length === 0) return
   
+  const t = Number.isFinite(time) && time >= 0 ? time : Tone.now()
   // Seleccionar un oscilador basado en el índice actual para distribuir en stereo
   const oscillatorIndex = currentArpeggioIndex % arpeggiatorOscillators.length
   const currentOscillator = arpeggiatorOscillators[oscillatorIndex]
@@ -270,17 +300,18 @@ function playArpeggioNote(time) {
   // Apagar todos los envelopes primero para evitar superposición
   arpeggiatorEnvelopes.forEach((envelope, index) => {
     if (index !== oscillatorIndex) {
-      envelope.triggerRelease(time)
+      envelope.triggerRelease(t)
     }
   })
   
   // Encender la nota actual del arpegio usando el oscilador seleccionado
   const currentFreq = armonicos.value[currentArpeggioIndex]
   if (currentFreq && currentOscillator && currentEnvelope) {
-    currentOscillator.frequency.setValueAtTime(currentFreq, time)
+    currentOscillator.frequency.setValueAtTime(currentFreq, t)
     currentOscillator.type = oscillatorType.value
-    currentEnvelope.triggerAttack(time)
+    currentEnvelope.triggerAttack(t)
   }
+  activeArpeggioIndex.value = currentArpeggioIndex
   
   // Calcular el siguiente índice según el tipo de arpegio
   const arrayLength = armonicos.value.length
@@ -292,14 +323,20 @@ function playArpeggioNote(time) {
       currentArpeggioIndex = (currentArpeggioIndex - 1 + arrayLength) % arrayLength
       break
     case 'updown':
-      currentArpeggioIndex += arpeggioDirection
-      if (currentArpeggioIndex >= arrayLength) {
-        currentArpeggioIndex = arrayLength - 2
-        arpeggioDirection = -1
-      } else if (currentArpeggioIndex < 0) {
-        currentArpeggioIndex = 1
-        arpeggioDirection = 1
+      if (arrayLength <= 1) {
+        currentArpeggioIndex = 0
+        break
       }
+      if (arpeggioDirection === 1) {
+        if (currentArpeggioIndex >= arrayLength - 1) {
+          arpeggioDirection = -1
+        }
+      } else {
+        if (currentArpeggioIndex <= 0) {
+          arpeggioDirection = 1
+        }
+      }
+      currentArpeggioIndex += arpeggioDirection
       break
     case 'random':
       currentArpeggioIndex = Math.floor(Math.random() * arrayLength)
@@ -307,34 +344,40 @@ function playArpeggioNote(time) {
   }
 }
 function calcular() {
-
-  syntArr[0].frequency.value = fundamental.value
-  // Solo encender el oscilador fundamental si el arpegiador NO está activo
-  if (!arpeggiatorActive.value) {
-    syntArr[0].volume.value = volume.value
-  }
-
-  // Guardar el índice actual del arpegiador
-  const prevArpeggioIndex = currentArpeggioIndex
-  
-  for (let i = 0; i < cantArmonicos.value; i++) {
-    let v = parseFloat(fibonacci(i + 1 + parseFloat(offset.value))) * parseFloat(multiplicador.value) + parseFloat(fundamental.value)
-    armonicos.value[i] = v
-    if (audioStarted.value) {
-      syntArr[i + 1].frequency.value = v
-      // Solo encender el oscilador si el arpegiador NO está activo
-      if (!arpeggiatorActive.value) {
-        syntArr[i + 1].volume.value = volume.value
-      }
-      panVolArr[i + 1].pan.value = i.mapValues(0, cantArmonicos.value, -1, 1)
+  if (syntArr[0]) {
+    syntArr[0].frequency.rampTo(fundamental.value, 0.02)
+    if (!arpeggiatorActive.value) {
+      syntArr[0].volume.rampTo(volumeDb.value, 0.05)
     }
   }
 
-  for (let index = cantArmonicos.value + 1; index < syntArr.length; index++) {
-    syntArr[index].volume.value = -100
+  const prevArpeggioIndex = currentArpeggioIndex
+  const next = []
+
+  for (let i = 0; i < cantArmonicos.value; i++) {
+    let v = parseFloat(fibonacci(i + 1 + parseFloat(offset.value))) * parseFloat(multiplicador.value) + parseFloat(fundamental.value)
+    next.push(v)
+    if (audioStarted.value) {
+      if (syntArr[i + 1]) {
+        syntArr[i + 1].frequency.rampTo(v, 0.02)
+        if (!arpeggiatorActive.value) {
+          syntArr[i + 1].volume.rampTo(volumeDb.value, 0.05)
+        }
+      }
+      if (panVolArr[i + 1]) {
+        panVolArr[i + 1].pan.value = i.mapValues(0, cantArmonicos.value, -1, 1)
+      }
+    }
   }
-  
-  // Si el arpegiador está activo y el array de armónicos cambió, ajustar el índice
+
+  armonicos.value = next
+
+  for (let index = cantArmonicos.value + 1; index < syntArr.length; index++) {
+    if (syntArr[index]) {
+      syntArr[index].volume.rampTo(-100, 0.05)
+    }
+  }
+
   if (arpeggiatorActive.value && armonicos.value.length > 0) {
     if (prevArpeggioIndex >= armonicos.value.length) {
       currentArpeggioIndex = 0
@@ -349,6 +392,11 @@ onUnmounted(() => {
   if (arpeggiatorInterval !== null) {
     Tone.Transport.clear(arpeggiatorInterval)
   }
+  Tone.Transport.stop()
+  if (tempoDebounceTimer) {
+    clearTimeout(tempoDebounceTimer)
+    tempoDebounceTimer = null
+  }
   
   // Limpiar todos los osciladores del arpegiador
   arpeggiatorOscillators.forEach(osc => {
@@ -361,6 +409,12 @@ onUnmounted(() => {
   arpeggiatorOscillators = []
   arpeggiatorPanners = []
   arpeggiatorEnvelopes = []
+  if (arpeggiatorMasterVolume) {
+    arpeggiatorMasterVolume.dispose()
+    arpeggiatorMasterVolume = null
+  }
+  syntArr.forEach(o => { o.stop(); o.dispose(); })
+  panVolArr.forEach(p => p.dispose())
   
   // Limpiar oscilador antiguo (para compatibilidad)
   if (arpeggiatorOsc) {
@@ -375,91 +429,128 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Button v-if="!audioStarted " @click="startAudio">Start</Button>
-  <div v-if="audioStarted">
-    <div class="card">
-      <Dropdown :options="oscillatorTypes" v-model="oscillatorType"></Dropdown>
-      <p></p>
-      
-      <!-- Controles del Arpegiador -->
-      <div class="arpeggiator-controls">
-        <Button 
-          @click="toggleArpeggiator" 
-          :severity="arpeggiatorActive ? 'danger' : 'success'"
-          class="mr-2"
-        >
-          {{ arpeggiatorActive ? 'Detener Arpegiador' : 'Iniciar Arpegiador' }}
-        </Button>
-        <Dropdown 
-          :options="arpeggiatorTypes" 
-          optionLabel="label" 
-          optionValue="value"
-          v-model="arpeggiatorType"
-          placeholder="Tipo de Arpegio"
-          class="mr-2"
-        ></Dropdown>
-        <Card class="flex">
-          <template #content>
-            <p>Tempo {{arpeggiatorTempo}}ms</p>
-            <VSlider v-model="arpeggiatorTempo" :min="50" :max="500" step="10"></VSlider>
-          </template>
-        </Card>
-      </div>
-      <p></p>
-      <div class="gap-3 card-container blue-container flex align-items-center justify-content-start">
-        <Card class="flex">
-          <template #content>
-            <p>Fund {{fundamental}}</p>
-            <VSlider v-model="fundamental" :min="80" :max="3000"></VSlider>
-          </template>
-        </Card>
-        <Card class="flex">
-          <template #content>
-            <p>Armónicos {{cantArmonicos}}</p>
-            <VSlider v-model="cantArmonicos" :min="1" :max="maxArmonicos"></VSlider>
-          </template>
-        </Card>
-        <Card class="flex">
-          <template #content>
-            <p>Mult {{multiplicador}}</p>
-            <VSlider v-model="multiplicador" :min=1 :max=60 step=0.1></VSlider>
-          </template>
-        </Card>
-        <Card class="flex">
-          <template #content>
-            <p>Fib Offset {{offset}}</p>
-            <VSlider v-model="offset" :min="0" :max="20"></VSlider>
-          </template>
-        </Card>
-        <Card class="flex">
-          <template #content>
-            <p>volume {{volume}}</p>
-            <VSlider v-model="volume" :min="-100" :max="-20"></VSlider>
-          </template>
-        </Card>
-      </div>
-    </div>
+  <div class="flex flex-column align-items-center justify-content-center min-h-screen p-4 surface-ground">
+    <Button v-if="!audioStarted" @click="startAudio" size="large" label="Start Audio Engine" icon="pi pi-play" class="p-button-raised p-button-lg" />
+    
+    <div v-if="audioStarted" class="w-full max-w-7 fadein animation-duration-500">
+        <!-- Main Controls Header -->
+        <div class="flex justify-content-between align-items-center mb-4 p-3 surface-card border-round shadow-2">
+             <div class="flex gap-3 align-items-center">
+                 <i class="pi pi-wave-pulse text-2xl text-primary"></i>
+                 <span class="font-bold text-xl">Fibonacci Harmonics</span>
+             </div>
+             <div class="flex gap-3 align-items-center">
+                 <Dropdown :options="oscillatorTypes" v-model="oscillatorType" class="w-10rem" />
+             </div>
+        </div>
 
-    <div>
-      <Tag class="mr-2" v-for="item in armonicos">{{item}} </Tag>
+        <div class="grid">
+            <!-- Harmonics Controls (Left/Center) -->
+            <div class="col-12 md:col-8">
+                <Card class="h-full shadow-2">
+                    <template #title>Harmonics Generator</template>
+                    <template #content>
+                        <div class="flex justify-content-around flex-wrap gap-4 mt-4">
+                            <!-- Fundamental -->
+                            <div class="flex flex-column align-items-center gap-3">
+                                <Slider v-model="fundamental" :min="80" :max="3000" orientation="vertical" class="h-12rem" />
+                                <div class="text-center">
+                                    <span class="block font-medium text-sm mb-1">Fund</span>
+                                    <span class="block text-xs text-500">{{ Math.round(fundamental) }} Hz</span>
+                                </div>
+                            </div>
+                            <!-- Harmonics Count -->
+                            <div class="flex flex-column align-items-center gap-3">
+                                <Slider v-model="cantArmonicos" :min="1" :max="maxArmonicos" orientation="vertical" class="h-12rem" />
+                                <div class="text-center">
+                                    <span class="block font-medium text-sm mb-1">Count</span>
+                                    <span class="block text-xs text-500">{{ cantArmonicos }}</span>
+                                </div>
+                            </div>
+                            <!-- Multiplier -->
+                            <div class="flex flex-column align-items-center gap-3">
+                                <Slider v-model="multiplicador" :min="1" :max="60" :step="0.1" orientation="vertical" class="h-12rem" />
+                                <div class="text-center">
+                                    <span class="block font-medium text-sm mb-1">Mult</span>
+                                    <span class="block text-xs text-500">{{ multiplicador.toFixed(1) }}</span>
+                                </div>
+                            </div>
+                             <!-- Offset -->
+                            <div class="flex flex-column align-items-center gap-3">
+                                <Slider v-model="offset" :min="0" :max="20" orientation="vertical" class="h-12rem" />
+                                <div class="text-center">
+                                    <span class="block font-medium text-sm mb-1">Offset</span>
+                                    <span class="block text-xs text-500">{{ offset }}</span>
+                                </div>
+                            </div>
+                             <!-- Volume -->
+                            <div class="flex flex-column align-items-center gap-3">
+                                <Slider v-model="volumeSlider" :min="0" :max="100" orientation="vertical" class="h-12rem" />
+                                <div class="text-center">
+                                    <span class="block font-medium text-sm mb-1">Vol</span>
+                                    <span class="block text-xs text-500">{{ Math.round(volumeDb) }} dB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </Card>
+            </div>
 
+            <!-- Arpeggiator Controls (Right) -->
+            <div class="col-12 md:col-4">
+                <Card class="h-full shadow-2">
+                    <template #title>
+                        <div class="flex align-items-center justify-content-between">
+                            <span>Arpeggiator</span>
+                            <Button 
+                                @click="toggleArpeggiator" 
+                                :icon="arpeggiatorActive ? 'pi pi-stop' : 'pi pi-play'" 
+                                :severity="arpeggiatorActive ? 'danger' : 'success'" 
+                                rounded 
+                                text
+                            />
+                        </div>
+                    </template>
+                    <template #content>
+                        <div class="flex flex-column gap-5 mt-3">
+                            <div class="flex flex-column gap-2">
+                                <label class="text-sm font-medium text-500">Pattern</label>
+                                <Dropdown 
+                                    :options="arpeggiatorTypes" 
+                                    optionLabel="label" 
+                                    optionValue="value"
+                                    v-model="arpeggiatorType"
+                                    class="w-full"
+                                />
+                            </div>
+                            <div class="flex flex-column gap-2">
+                                <div class="flex justify-content-between">
+                                    <label class="text-sm font-medium text-500">Tempo</label>
+                                    <span class="text-sm font-bold">{{ arpeggiatorTempo }}ms</span>
+                                </div>
+                                <Slider v-model="arpeggiatorTempo" :min="50" :max="500" :step="10" />
+                            </div>
+                        </div>
+                    </template>
+                </Card>
+            </div>
+            
+            <!-- Visualization (Bottom) -->
+            <div class="col-12">
+                 <div class="flex flex-wrap gap-2 justify-content-center mt-3">
+                    <Tag 
+                        v-for="(item, idx) in armonicos" 
+                        :key="idx" 
+                        :value="Math.round(item)"
+                        :severity="arpeggiatorActive && idx === activeArpeggioIndex ? 'danger' : 'primary'"
+                        class="text-base px-3 py-2 border-round-xl"
+                    />
+                 </div>
+            </div>
+        </div>
     </div>
   </div>
-
 </template>
 
 <style scoped>
-.arpeggiator-controls {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  align-items: center;
-}
-
-@media (max-width: 768px) {
-  .arpeggiator-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
 </style>
