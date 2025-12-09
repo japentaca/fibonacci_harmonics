@@ -162,6 +162,10 @@
         // (x % 1)
         oscVal = (time * speed) % 1
         break
+      case 'inv sawtooth':
+        // 1 - (x % 1)
+        oscVal = 1 - ((time * speed) % 1)
+        break
     }
 
     const newVal = min + (max - min) * oscVal

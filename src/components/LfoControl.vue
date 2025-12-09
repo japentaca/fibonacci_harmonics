@@ -26,7 +26,8 @@
     { label: 'Sine', value: 'sine' },
     { label: 'Triangle', value: 'triangle' },
     { label: 'Square', value: 'square' },
-    { label: 'Sawtooth', value: 'sawtooth' }
+    { label: 'Sawtooth', value: 'sawtooth' },
+    { label: 'Inverse Sawtooth', value: 'inv sawtooth' }
   ];
 
   // Simple debounce implementation
@@ -97,6 +98,9 @@
         case 'sawtooth':
           val = stepPhase;
           break;
+        case 'inv sawtooth':
+          val = 1 - stepPhase;
+          break;
       }
 
       const y = 1 - val;
@@ -133,6 +137,9 @@
         break;
       case 'sawtooth':
         valAtCursor = currentPhase;
+        break;
+      case 'inv sawtooth':
+        valAtCursor = 1 - currentPhase;
         break;
     }
     const yAtCursor = 4 + ((1 - valAtCursor) * (height - 8));
