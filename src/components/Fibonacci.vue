@@ -69,10 +69,10 @@
   const arpeggiatorType = ref('up')
   const arpeggiatorTempo = ref(150) // ms entre notas
   const arpeggiatorTypes = [
-    { label: 'Arriba', value: 'up' },
-    { label: 'Abajo', value: 'down' },
-    { label: 'Arriba-Abajo', value: 'updown' },
-    { label: 'Aleatorio', value: 'random' }
+    { label: 'Up', value: 'up' },
+    { label: 'Down', value: 'down' },
+    { label: 'Up-Down', value: 'updown' },
+    { label: 'Random', value: 'random' }
   ]
   let arpeggiatorInterval = null
   let currentArpeggioIndex = 0
