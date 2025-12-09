@@ -551,7 +551,7 @@
           <span class="font-bold text-xl">Fibonacci Harmonics</span>
         </div>
         <div class="flex gap-3 align-items-center">
-          <Dropdown :options="oscillatorTypes" v-model="oscillatorType" class="w-10rem" />
+
         </div>
       </div>
 
@@ -559,7 +559,12 @@
         <!-- Harmonics Controls (Left/Center) -->
         <div class="col-12 md:col-8">
           <Card class="h-full shadow-2">
-            <template #title>Harmonics Generator</template>
+            <template #title>
+              <div class="flex justify-content-between align-items-center">
+                <span>Harmonics Generator</span>
+                <Dropdown :options="oscillatorTypes" v-model="oscillatorType" class="w-10rem" />
+              </div>
+            </template>
             <template #content>
               <div class="flex justify-content-around flex-wrap gap-4 mt-4">
                 <!-- Fundamental -->

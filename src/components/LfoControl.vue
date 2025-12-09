@@ -182,7 +182,7 @@
 <template>
   <div class="flex flex-column gap-2 p-3 surface-overlay border-round">
     <div class="flex align-items-center justify-content-between">
-      <span class="font-bold text-sm">{{ label }} LFO</span>
+      <span class="font-bold text-sm">{{ label }}</span>
       <InputSwitch v-model="localState.active" />
     </div>
 
