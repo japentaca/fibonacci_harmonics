@@ -207,7 +207,7 @@
           <span>Speed</span>
           <span>{{ localState.speed }} Hz</span>
         </div>
-        <Slider v-model="localState.speed" :min="0.1" :max="5" :step="0.1" class="w-full" />
+        <Slider v-model="localState.speed" :min="0.01" :max="5" :step="0.01" class="w-full" />
       </div>
 
       <!-- Type -->
