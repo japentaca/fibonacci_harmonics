@@ -36,6 +36,11 @@
   // Actual dB value calculated from slider
   const volumeDb = ref(-20)
 
+  // Delay state
+  const delaySend = ref(25)
+  const delayTime = ref(0.25)
+  const delayFeedback = ref(0.4)
+
   const audioStarted = ref(false)
   let syntArr = []
   let panVolArr = []
@@ -45,6 +50,8 @@
   let arpeggiatorPanners = [] // Array para los paneadores stereo
   let arpeggiatorMasterVolume = null
   let arpeggiatorEnvelopes = [] // Array para los envelopes ADSR
+  let delayNode = null
+  let delaySendGain = null
   const maxArpeggiatorOscillators = 8 // Número máximo de osciladores para el arpegiador
   const arpeggioAttack = 0.01 // Tiempo de ataque para evitar clicks
   const arpeggioRelease = 0.05 // Tiempo de release para transiciones suaves
@@ -98,14 +105,21 @@
     await Tone.start()
     audioStarted.value = true
 
+    // Create stereo ping-pong delay
+    delayNode = new Tone.PingPongDelay(delayTime.value, delayFeedback.value)
+    delaySendGain = new Tone.Gain(delaySend.value / 100)
+    delaySendGain.connect(delayNode)
+    delayNode.toDestination()
+    delayNode.wet.value = 1
 
     for (let index = 0; index < maxArmonicos + 1; index++) {
       const synt = new Tone.Oscillator(440, oscillatorType.value)
-      let panVol = new Tone.Panner(-0.25).toDestination();
+      let panVol = new Tone.Panner(-0.25)
+      panVol.toDestination()
+      panVol.connect(delaySendGain)
       synt.connect(panVol)
       synt.volume.value = -100
       synt.start()
-      //synt.triggerAttack(440)
 
       panVol.pan.value = index.mapValues(0, maxArmonicos, -1, 1)
       panVolArr[index] = panVol
@@ -261,6 +275,21 @@
       }
     }
   })
+  watch(delaySend, () => {
+    if (delaySendGain) {
+      delaySendGain.gain.rampTo(delaySend.value / 100, 0.05)
+    }
+  })
+  watch(delayTime, () => {
+    if (delayNode) {
+      delayNode.delayTime.rampTo(delayTime.value, 0.05)
+    }
+  })
+  watch(delayFeedback, () => {
+    if (delayNode) {
+      delayNode.feedback.rampTo(delayFeedback.value, 0.05)
+    }
+  })
   function setVolumes() {
     for (let index = 0; index < syntArr.length; index++) {
       if (syntArr[index]) {
@@ -316,7 +345,11 @@
     // Crear múltiples osciladores para el arpegiador si no existen
     if (arpeggiatorOscillators.length === 0) {
       if (!arpeggiatorMasterVolume) {
-        arpeggiatorMasterVolume = new Tone.Volume(volumeDb.value + arpeggiatorGainBoostDB).toDestination()
+        arpeggiatorMasterVolume = new Tone.Volume(volumeDb.value + arpeggiatorGainBoostDB)
+        arpeggiatorMasterVolume.toDestination()
+        if (delaySendGain) {
+          arpeggiatorMasterVolume.connect(delaySendGain)
+        }
       }
       for (let i = 0; i < maxArpeggiatorOscillators; i++) {
         const osc = new Tone.Oscillator(440, oscillatorType.value)
@@ -498,6 +531,14 @@
       arpeggiatorMasterVolume.dispose()
       arpeggiatorMasterVolume = null
     }
+    if (delayNode) {
+      delayNode.dispose()
+      delayNode = null
+    }
+    if (delaySendGain) {
+      delaySendGain.dispose()
+      delaySendGain = null
+    }
     syntArr.forEach(o => { o.stop(); o.dispose(); })
     panVolArr.forEach(p => p.dispose())
 
@@ -648,6 +689,41 @@
                     <span class="text-sm font-bold">{{ arpeggiatorTempo }}ms</span>
                   </div>
                   <Slider v-model="arpeggiatorTempo" :min="50" :max="500" :step="10" />
+                </div>
+              </div>
+            </template>
+          </Card>
+
+          <!-- Ping-Pong Delay -->
+          <Card class="mt-3 shadow-2">
+            <template #title>
+              <div class="flex align-items-center gap-2">
+                <i class="pi pi-arrow-right-arrow-left text-primary"></i>
+                <span>Ping-Pong Delay</span>
+              </div>
+            </template>
+            <template #content>
+              <div class="flex flex-column gap-4 mt-3">
+                <div class="flex flex-column gap-2">
+                  <div class="flex justify-content-between">
+                    <label class="text-sm font-medium text-500">Send</label>
+                    <span class="text-sm font-bold">{{ delaySend }}%</span>
+                  </div>
+                  <Slider v-model="delaySend" :min="0" :max="100" />
+                </div>
+                <div class="flex flex-column gap-2">
+                  <div class="flex justify-content-between">
+                    <label class="text-sm font-medium text-500">Time</label>
+                    <span class="text-sm font-bold">{{ (delayTime * 1000).toFixed(0) }}ms</span>
+                  </div>
+                  <Slider v-model="delayTime" :min="0.05" :max="1" :step="0.01" />
+                </div>
+                <div class="flex flex-column gap-2">
+                  <div class="flex justify-content-between">
+                    <label class="text-sm font-medium text-500">Feedback</label>
+                    <span class="text-sm font-bold">{{ (delayFeedback * 100).toFixed(0) }}%</span>
+                  </div>
+                  <Slider v-model="delayFeedback" :min="0" :max="0.9" :step="0.01" />
                 </div>
               </div>
             </template>
