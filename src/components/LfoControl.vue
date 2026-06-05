@@ -1,5 +1,5 @@
 <script setup>
-  import { ref, watch, onMounted, onUnmounted } from 'vue';
+  import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
   import Slider from 'primevue/slider';
   import Dropdown from 'primevue/dropdown';
   import InputSwitch from 'primevue/inputswitch';
@@ -21,6 +21,37 @@
   if (!localState.value.range) {
     localState.value.range = [props.paramMin, props.paramMax];
   }
+
+  // Exponential mapping for the speed slider so low Hz values are more precise.
+  // Slider position is 0-100, mapped to actual Hz via speed = MIN * (MAX/MIN)^(t/100).
+  const SPEED_MIN = 0.01;
+  const SPEED_MAX = 5;
+  const SPEED_RATIO = SPEED_MAX / SPEED_MIN; // 500
+
+  function speedFromPosition(t) {
+    const clamped = Math.max(0, Math.min(100, t));
+    return SPEED_MIN * Math.pow(SPEED_RATIO, clamped / 100);
+  }
+  function positionFromSpeed(s) {
+    if (!s || s <= SPEED_MIN) return 0;
+    if (s >= SPEED_MAX) return 100;
+    return Math.log(s / SPEED_MIN) / Math.log(SPEED_RATIO) * 100;
+  }
+  function formatSpeed(s) {
+    if (s < 0.1) return s.toFixed(3);
+    if (s < 1) return s.toFixed(2);
+    return s.toFixed(1);
+  }
+
+  // Slider position is the single source of truth for the displayed speed.
+  // The previous computed-setter + deep watch + JSON.stringify guard combo
+  // could snap to a different value on release due to float precision.
+  const speedPos = ref(Math.round(positionFromSpeed(localState.value.speed ?? 0.5)));
+  const displaySpeed = computed(() => speedFromPosition(speedPos.value));
+
+  watch(speedPos, (pos) => {
+    localState.value.speed = speedFromPosition(pos);
+  });
 
   const typeOptions = [
     { label: 'Sine', value: 'sine' },
@@ -48,9 +79,25 @@
     debouncedEmit({ ...newVal });
   }, { deep: true });
 
+  // Sync from external modelValue changes (e.g. parent reset). Only update
+  // fields that differ, and only treat speed as a real change if the
+  // difference is larger than 1 slider step (avoids float-precision jitter).
   watch(() => props.modelValue, (newVal) => {
-    if (JSON.stringify(newVal) !== JSON.stringify(localState.value)) {
-      localState.value = { ...newVal };
+    if (!newVal) return;
+    if (newVal.active !== localState.value.active) localState.value.active = newVal.active;
+    if (newVal.type !== localState.value.type) localState.value.type = newVal.type;
+    if (JSON.stringify(newVal.range) !== JSON.stringify(localState.value.range)) {
+      localState.value.range = [...newVal.range];
+    }
+    if (newVal.min !== localState.value.min) localState.value.min = newVal.min;
+    if (newVal.max !== localState.value.max) localState.value.max = newVal.max;
+    if (newVal.speed != null) {
+      const currentPos = Math.round(positionFromSpeed(localState.value.speed));
+      const newPos = Math.round(positionFromSpeed(newVal.speed));
+      if (Math.abs(newPos - currentPos) > 1) {
+        speedPos.value = newPos;
+        localState.value.speed = newVal.speed;
+      }
     }
   }, { deep: true });
 
@@ -205,9 +252,9 @@
       <div class="flex flex-column gap-1">
         <div class="flex justify-content-between text-xs text-500">
           <span>Speed</span>
-          <span>{{ localState.speed }} Hz</span>
+          <span>{{ formatSpeed(displaySpeed) }} Hz</span>
         </div>
-        <Slider v-model="localState.speed" :min="0.01" :max="5" :step="0.01" class="w-full" />
+        <Slider v-model="speedPos" :min="0" :max="100" :step="1" class="w-full" />
       </div>
 
       <!-- Type -->

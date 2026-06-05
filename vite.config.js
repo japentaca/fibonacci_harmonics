@@ -4,6 +4,9 @@ import vue from '@vitejs/plugin-vue'
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/fibonacci_harmonics/',
+  server: {
+    port: 31653
+  },
   plugins: [vue()]
 })
 

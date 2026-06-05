@@ -18,7 +18,6 @@
   const maxArmonicos = 10
   const fundamental = ref(440)
   const cantArmonicos = ref(4)
-  const multiplicador = ref(1)
   const armonicos = shallowRef([])
   const offset = ref(2)
 
@@ -29,6 +28,11 @@
     offset: { active: false, type: 'sine', min: 0, max: 20, speed: 0.1, range: [0, 5] },
   })
   let lfoAnimationId = null
+  // Per-LFO phase accumulator. Advancing phase by dt*speed (instead of
+  // computing from absolute time) makes speed changes during a drag
+  // smooth — no phase jumps, no crazy values.
+  const lfoPhases = { fundamental: 0, cantArmonicos: 0, offset: 0 }
+  const lfoLastTime = { fundamental: 0, cantArmonicos: 0, offset: 0 }
 
   // Volume control state
   // 0-100 linear slider value for smoother UI control
@@ -152,33 +156,40 @@
 
   function applyLfo(key, targetRef, time) {
     const lfo = lfos.value[key]
-    if (!lfo || !lfo.active) return
+    if (!lfo || !lfo.active) {
+      lfoLastTime[key] = time
+      return
+    }
+
+    // Phase accumulator: advance by dt*speed so speed changes don't jump the phase.
+    const dt = time - lfoLastTime[key]
+    lfoLastTime[key] = time
+    if (dt <= 0) return
+
+    const speed = lfo.speed
+    let phase = lfoPhases[key] + dt * speed
+    phase = phase - Math.floor(phase) // keep in [0, 1)
+    lfoPhases[key] = phase
 
     const [min, max] = lfo.range
-    const speed = lfo.speed
     let oscVal = 0
 
     // Standard LFO types mapping to 0..1 range
     switch (lfo.type) {
       case 'sine':
-        // sin is -1 to 1 -> map to 0 to 1: (sin + 1) / 2
-        oscVal = (Math.sin(time * speed * 2 * Math.PI) + 1) / 2
+        oscVal = (Math.sin(phase * 2 * Math.PI) + 1) / 2
         break
       case 'triangle':
-        // 0..1..0 sequence
-        // (asin(sin(x)) / (PI/2) + 1) / 2
-        oscVal = (Math.asin(Math.sin(time * speed * 2 * Math.PI)) / (Math.PI / 2) + 1) / 2
+        oscVal = (Math.asin(Math.sin(phase * 2 * Math.PI)) / (Math.PI / 2) + 1) / 2
         break
       case 'square':
-        oscVal = Math.sin(time * speed * 2 * Math.PI) > 0 ? 1 : 0
+        oscVal = phase < 0.5 ? 1 : 0
         break
       case 'sawtooth':
-        // (x % 1)
-        oscVal = (time * speed) % 1
+        oscVal = phase
         break
       case 'inv sawtooth':
-        // 1 - (x % 1)
-        oscVal = 1 - ((time * speed) % 1)
+        oscVal = 1 - phase
         break
     }
 
@@ -216,7 +227,7 @@
       arpeggiatorMasterVolume.volume.rampTo(volumeDb.value + arpeggiatorGainBoostDB, 0.05)
     }
   })
-  watch([fundamental, cantArmonicos, multiplicador, offset], () => {
+  watch([fundamental, cantArmonicos, offset], () => {
     calcular()
   })
   watch(oscillatorType, async () => {
@@ -469,7 +480,7 @@
     const next = []
 
     for (let i = 0; i < cantArmonicos.value; i++) {
-      let v = parseFloat(fibonacci(i + 1 + parseFloat(offset.value))) * parseFloat(multiplicador.value) + parseFloat(fundamental.value)
+      let v = parseFloat(fibonacci(i + 1 + parseFloat(offset.value))) + parseFloat(fundamental.value)
       next.push(v)
       if (audioStarted.value) {
         if (syntArr[i + 1]) {
@@ -629,18 +640,6 @@
                   <LfoControl label="LFO" v-model="lfos.cantArmonicos" :paramMin="1" :paramMax="10" class="w-14rem" />
                 </div>
 
-                <!-- Multiplier -->
-
-                <!-- Multiplier -->
-                <div class="flex flex-column align-items-center gap-3 border-1 surface-border p-3 border-round">
-                  <Slider v-model="multiplicador" :min="1" :max="60" :step="0.1" orientation="vertical"
-                    class="h-12rem" />
-                  <div class="text-center">
-                    <span class="block font-medium text-sm mb-1">Mult</span>
-                    <span class="block text-xs text-500">{{ multiplicador.toFixed(1) }}</span>
-                  </div>
-                </div>
-
                 <!-- Offset -->
                 <div class="flex flex-column align-items-center gap-3 border-1 surface-border p-3 border-round">
                   <Slider v-model="offset" :min="0" :max="20" orientation="vertical" class="h-12rem" />
@@ -668,7 +667,7 @@
 
         <!-- Arpeggiator Controls (Right) -->
         <div class="col-12 md:col-4">
-          <Card class="h-full shadow-2">
+          <Card class="shadow-2">
             <template #title>
               <div class="flex align-items-center justify-content-between">
                 <span>Arpeggiator</span>
@@ -677,13 +676,13 @@
               </div>
             </template>
             <template #content>
-              <div class="flex flex-column gap-5 mt-3">
-                <div class="flex flex-column gap-2">
+              <div class="grid">
+                <div class="col-12 md:col-7 flex flex-column gap-1">
                   <label class="text-sm font-medium text-500">Pattern</label>
                   <Dropdown :options="arpeggiatorTypes" optionLabel="label" optionValue="value"
                     v-model="arpeggiatorType" class="w-full" />
                 </div>
-                <div class="flex flex-column gap-2">
+                <div class="col-12 md:col-5 flex flex-column gap-1">
                   <div class="flex justify-content-between">
                     <label class="text-sm font-medium text-500">Tempo</label>
                     <span class="text-sm font-bold">{{ arpeggiatorTempo }}ms</span>
