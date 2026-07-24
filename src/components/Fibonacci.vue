@@ -96,10 +96,13 @@
   }
 
   function fibonacci(n) {
-    const index = Math.round(n)
-    if (index < 0) return 0
-    if (index >= fibCache.length) return fibCache[fibCache.length - 1]
-    return fibCache[index]
+    if (n <= 0) return 0
+    if (n >= fibCache.length - 1) return fibCache[fibCache.length - 1]
+    const lower = Math.floor(n)
+    const upper = Math.ceil(n)
+    if (lower === upper) return fibCache[lower]
+    const frac = n - lower
+    return fibCache[lower] * (1 - frac) + fibCache[upper] * frac
   }
 
 
