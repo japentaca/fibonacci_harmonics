@@ -8,7 +8,8 @@
     label: String,
     modelValue: Object, // { active, min, max, type, speed, range: [min, max] }
     paramMin: Number,
-    paramMax: Number
+    paramMax: Number,
+    lfoPhase: Number
   });
 
   const emit = defineEmits(['update:modelValue']);
@@ -118,10 +119,15 @@
 
     const type = localState.value.type;
     const speed = localState.value.speed;
-    const time = Date.now() / 1000;
 
     const cycleDuration = 1 / speed;
-    const currentPhase = (time % cycleDuration) / cycleDuration;
+    let currentPhase;
+    if (props.lfoPhase != null && localState.value.active) {
+      currentPhase = ((props.lfoPhase % 1) + 1) % 1;
+    } else {
+      const time = Date.now() / 1000;
+      currentPhase = (time % cycleDuration) / cycleDuration;
+    }
 
     // Draw Static Waveform
     ctx.beginPath();

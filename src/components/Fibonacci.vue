@@ -1,5 +1,5 @@
 <script setup>
-  import { ref, watch, onUnmounted, shallowRef } from 'vue'
+  import { ref, reactive, watch, onUnmounted, shallowRef } from 'vue'
   import Tag from 'primevue/tag';
   import Button from "primevue/button"
   import Dropdown from "primevue/dropdown"
@@ -31,7 +31,7 @@
   // Per-LFO phase accumulator. Advancing phase by dt*speed (instead of
   // computing from absolute time) makes speed changes during a drag
   // smooth — no phase jumps, no crazy values.
-  const lfoPhases = { fundamental: 0, cantArmonicos: 0, offset: 0 }
+  const lfoPhases = reactive({ fundamental: 0, cantArmonicos: 0, offset: 0 })
   const lfoLastTime = { fundamental: 0, cantArmonicos: 0, offset: 0 }
 
   // Volume control state
@@ -630,7 +630,7 @@
                     <span class="block font-medium text-sm mb-1">Fund</span>
                     <span class="block text-xs text-500">{{ Math.round(fundamental) }} Hz</span>
                   </div>
-                  <LfoControl label="LFO" v-model="lfos.fundamental" :paramMin="80" :paramMax="2000" class="w-14rem" />
+                    <LfoControl label="LFO" v-model="lfos.fundamental" :paramMin="80" :paramMax="2000" :lfo-phase="lfoPhases.fundamental" class="w-14rem" />
                 </div>
 
                 <!-- Harmonics Count -->
@@ -640,7 +640,7 @@
                     <span class="block font-medium text-sm mb-1">Count</span>
                     <span class="block text-xs text-500">{{ cantArmonicos }}</span>
                   </div>
-                  <LfoControl label="LFO" v-model="lfos.cantArmonicos" :paramMin="1" :paramMax="10" class="w-14rem" />
+                    <LfoControl label="LFO" v-model="lfos.cantArmonicos" :paramMin="1" :paramMax="10" :lfo-phase="lfoPhases.cantArmonicos" class="w-14rem" />
                 </div>
 
                 <!-- Offset -->
@@ -650,7 +650,7 @@
                     <span class="block font-medium text-sm mb-1">Offset</span>
                     <span class="block text-xs text-500">{{ offset }}</span>
                   </div>
-                  <LfoControl label="LFO" v-model="lfos.offset" :paramMin="0" :paramMax="20" class="w-14rem" />
+                    <LfoControl label="LFO" v-model="lfos.offset" :paramMin="0" :paramMax="20" :lfo-phase="lfoPhases.offset" class="w-14rem" />
                 </div>
 
                 <!-- Volume -->
