@@ -33,8 +33,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
+        env:
+          # The site is published in a subfolder of the user page, so the assets
+          # have to be built with the name of the repository as their base path
+          VITE_BASE: /${{ github.event.repository.name }}/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

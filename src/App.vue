@@ -3,9 +3,7 @@ import Fibonacci from './components/Fibonacci.vue'
 </script>
 
 <template>
-  <div>
-
-  </div>
+  <div />
   <Fibonacci />
 </template>
 

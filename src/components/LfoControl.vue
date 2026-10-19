@@ -3,13 +3,20 @@
   import Slider from 'primevue/slider';
   import Dropdown from 'primevue/dropdown';
   import InputSwitch from 'primevue/inputswitch';
+  import * as Tone from 'tone';
 
   const props = defineProps({
-    label: String,
-    modelValue: Object, // { active, min, max, type, speed, range: [min, max] }
-    paramMin: Number,
-    paramMax: Number,
-    lfoPhase: Number
+    label: { type: String, default: 'LFO' },
+    // { active, type, speed, range: [min, max] }
+    modelValue: {
+      type: Object,
+      default: () => ({ active: false, type: 'sine', speed: 0.5, range: [0, 100] })
+    },
+    paramMin: { type: Number, default: 0 },
+    paramMax: { type: Number, default: 100 },
+    lfoPhase: { type: Number, default: null },
+    // Audio clock timestamp of the phase sample, used to interpolate the cursor
+    lfoPhaseTime: { type: Number, default: null }
   });
 
   const emit = defineEmits(['update:modelValue']);
@@ -90,8 +97,6 @@
     if (JSON.stringify(newVal.range) !== JSON.stringify(localState.value.range)) {
       localState.value.range = [...newVal.range];
     }
-    if (newVal.min !== localState.value.min) localState.value.min = newVal.min;
-    if (newVal.max !== localState.value.max) localState.value.max = newVal.max;
     if (newVal.speed != null) {
       const currentPos = Math.round(positionFromSpeed(localState.value.speed));
       const newPos = Math.round(positionFromSpeed(newVal.speed));
@@ -123,7 +128,16 @@
     const cycleDuration = 1 / speed;
     let currentPhase;
     if (props.lfoPhase != null && localState.value.active) {
-      currentPhase = ((props.lfoPhase % 1) + 1) % 1;
+      currentPhase = props.lfoPhase;
+      // The phase is sampled at control rate, so it is interpolated here with
+      // the audio clock to keep the cursor smooth.
+      if (props.lfoPhaseTime != null) {
+        const elapsed = Tone.getContext().currentTime - props.lfoPhaseTime;
+        if (elapsed > 0 && elapsed < 0.5) {
+          currentPhase += elapsed * speed;
+        }
+      }
+      currentPhase = ((currentPhase % 1) + 1) % 1;
     } else {
       const time = Date.now() / 1000;
       currentPhase = (time % cycleDuration) / cycleDuration;
@@ -236,13 +250,16 @@
   <div class="flex flex-column gap-2 p-3 surface-overlay border-round">
     <div class="flex align-items-center justify-content-between">
       <span class="font-bold text-sm">{{ label }}</span>
-      <InputSwitch v-model="localState.active" />
+      <InputSwitch v-model="localState.active" :aria-label="`Enable the ${label}`" />
     </div>
 
     <div v-if="localState.active" class="flex flex-column gap-3 mt-2">
       <!-- Canvas Visualization moved inside -->
       <div class="border-round overflow-hidden" style="height: 60px; background: #1e1e1e;">
-        <canvas ref="canvasRef" width="200" height="60" class="w-full h-full block"></canvas>
+        <canvas
+          ref="canvasRef" width="200" height="60" class="w-full h-full block" role="img"
+          :aria-label="`${label} waveform with the current phase cursor`"
+        />
       </div>
 
       <!-- Range -->
@@ -251,7 +268,10 @@
           <span>Range</span>
           <span>{{ Math.round(localState.range[0]) }} - {{ Math.round(localState.range[1]) }}</span>
         </div>
-        <Slider v-model="localState.range" :min="paramMin" :max="paramMax" range class="w-full" />
+        <Slider
+          v-model="localState.range" :min="paramMin" :max="paramMax" range class="w-full"
+          :aria-label="`${label} range, the minimum and the maximum value of the parameter`"
+        />
       </div>
 
       <!-- Speed -->
@@ -260,14 +280,19 @@
           <span>Speed</span>
           <span>{{ formatSpeed(displaySpeed) }} Hz</span>
         </div>
-        <Slider v-model="speedPos" :min="0" :max="100" :step="1" class="w-full" />
+        <Slider
+          v-model="speedPos" :min="0" :max="100" :step="1" class="w-full"
+          :aria-label="`${label} speed, in hertz`"
+        />
       </div>
 
       <!-- Type -->
       <div class="flex flex-column gap-1">
         <span class="text-xs text-500">Type</span>
-        <Dropdown v-model="localState.type" :options="typeOptions" optionLabel="label" optionValue="value"
-          class="w-full p-inputtext-sm" />
+        <Dropdown
+          v-model="localState.type" :options="typeOptions" option-label="label" option-value="value"
+          class="w-full p-inputtext-sm" :aria-label="`${label} waveform`"
+        />
       </div>
     </div>
   </div>
