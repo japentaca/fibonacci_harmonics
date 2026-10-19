@@ -14,15 +14,17 @@ record.
 ## Features
 
 - **Harmonics generator** — a series of partials derived from the Fibonacci numbers,
-  with a fundamental, a count of partials and an offset that shifts the starting partial.
-- **Three mapping modes** — `Fibonacci`, `Harmonic` and `Legacy (additive)`.
+  with a fundamental, a number of voices (the fundamental included) and an offset that
+  shifts the starting partial.
+- **Three mapping modes** — `Fibonacci ratios (×)`, `Harmonic series (×)` and
+  `Legacy distance (+)`.
 - **Nyquist guard** — partials that would fall above the Nyquist frequency are dropped
   automatically, and the UI tells you how many were removed.
 - **20 oscillator types** — `sine`, `sawtooth`, `triangle` and `square`, plus the
   extended variants with their own partials (`sine2` … `square5`).
 - **Stereo panning** — the fundamental stays in the centre and the rest of the
   partials are spread symmetrically to the left and to the right.
-- **Three LFOs** — one for the fundamental, one for the count of partials and one for
+- **Three LFOs** — one for the fundamental, one for the number of voices and one for
   the offset, each with its own waveform, speed and range.
 - **Arpeggiator** — `up`, `down`, `up-down` and `random` patterns with an adjustable
   tempo, an ADSR envelope and a stereo spread.
@@ -105,21 +107,23 @@ The first oscillator always plays the fundamental. Every other oscillator plays 
 partial, and the **offset** decides which partial is the first one: with an offset of
 `o`, the partial at position `i` is the partial number `p = i + o`.
 
-The three mapping modes turn that partial number `p` into a frequency:
+The three mapping modes turn that partial number `p` into a frequency. Two of them are
+**multiplicative** (the partial is a ratio of the fundamental), one is **additive** (the
+partial is the fundamental plus a distance):
 
-| Mode | Frequency of the partial `p` | Series with `f = 440 Hz`, count `3`, offset `2` |
+| Mode | Frequency of the partial `p` | Series with `f = 440 Hz`, voices `3`, offset `2` |
 | --- | --- | --- |
-| `Fibonacci` | `f × fib(p + 2)` | `440`, `2200`, `3520` Hz |
-| `Harmonic` | `f × (p + 1)` | `440`, `1760`, `2200` Hz |
-| `Legacy (additive)` | `f + fib(p)` | `440`, `442`, `443` Hz |
+| `Fibonacci ratios (×)` | `f × fib(p + 2)` | `440`, `2200`, `3520` Hz |
+| `Harmonic series (×)` | `f × (p + 1)` | `440`, `1760`, `2200` Hz |
+| `Legacy distance (+)` | `f + fib(p)` | `440`, `442`, `443` Hz |
 
 With those values the partial numbers are `p = 3` and `p = 4`, and the Fibonacci
 numbers are `fib(5) = 5` and `fib(6) = 8`, hence `440 × 5 = 2200` and `440 × 8 = 3520`
 in the Fibonacci mode.
 
-The `Legacy (additive)` mode is the original behaviour of the app: the Fibonacci
-numbers are *added* to the fundamental, so the result is a close cluster of
-frequencies instead of a wide series.
+The `Legacy distance (+)` mode is the original behaviour of the app: the Fibonacci
+numbers are *added* to the fundamental as a distance in Hz (2, 3, 5, 8, 13…), so the
+result is a close cluster of frequencies instead of a wide series.
 
 ### The Nyquist guard
 
@@ -130,8 +134,8 @@ wrong.
 
 To avoid that, the app only lets the partials grow up to **95 % of the Nyquist
 frequency** (20 947.5 Hz at 44.1 kHz). Every partial above that limit is dropped from
-the tail of the series, and the counter under `Count` shows how many were removed
-(`3 / 5`, `2 above Nyquist`). The count of partials you asked for is always kept in
+the tail of the series, and the counter under `Voices` shows how many were removed
+(`3 / 5`, `2 above Nyquist`). The number of voices you asked for is always kept in
 the state, so raising the fundamental brings the dropped partials back.
 
 ## The three LFOs
@@ -152,8 +156,8 @@ Every LFO has a **switch**, a **waveform**, a **speed** and a **range**.
   every oscillator in **cents**, so the whole series moves as one block. Its range is
   written in hertz in the UI (for example `220` – `660` Hz) and converted to cents
   relative to the current fundamental with `1200 × log₂(f / fundamental)`.
-- The **count LFO** and the **offset LFO** are control rate (every 33 ms): they write
-  the number of partials and the offset directly, which is why the count moves in
+- The **voices LFO** and the **offset LFO** are control rate (every 33 ms): they write
+  the number of voices and the offset directly, which is why the voices move in
   whole numbers and the offset glides continuously.
 
 The waveform of each LFO is drawn in a small canvas with a cursor that follows the
@@ -187,7 +191,7 @@ The **Load preset** dropdown has six built-in presets — `Warm Pad`, `Legacy Cl
 `Fundamental Drift`, `Bright Shimmer`, `Slow Swell` and `Random Machine` — and one more
 entry, `Load from URL`, that applies the state stored in the address bar.
 
-The **Copy link** button serialises the whole state (fundamental, count, offset,
+The **Copy link** button serialises the whole state (fundamental, voices, offset,
 mapping mode, oscillator, volume, delay, arpeggiator and the three LFOs), encodes it
 with base64url and writes it in the hash of the URL:
 
@@ -306,7 +310,7 @@ dev` and `npm run preview` serve the app at the root of the server.
 - **No sound**: browsers only allow audio after a user gesture. Click
   `Start Audio Engine` before expecting any output.
 - **A partial disappears**: it went over the Nyquist limit. Lower the fundamental or
-  the count of partials.
+  the number of voices.
 
 ## License
 

@@ -3,7 +3,7 @@
 
 import { DEFAULT_SAMPLE_RATE, NYQUIST_RATIO, MIN_DB, MAX_DB } from './constants.js'
 
-// Highest partial index in use is ~31 (count 10 + offset 20), so 40 entries
+// Highest partial index in use is ~31 (10 voices + offset 20), so 40 entries
 // are enough for every reachable frequency.
 export const FIB_CACHE_SIZE = 40
 

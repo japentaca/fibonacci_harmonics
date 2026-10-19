@@ -67,7 +67,7 @@
   const showShortcuts = ref(false)
   const exporting = ref(false)
   // True when the state comes from a preset, a shared link or a reset, so the
-  // default count is not forced over it when the engine starts
+    // default number of voices is not forced over it when the engine starts
   let stateApplied = false
   // Volume before the mute, so it can be restored
   let previousVolume = null
@@ -113,7 +113,7 @@
     // Native LFO for the fundamental
     lfo.createNativeLfo()
 
-    // The count of a shared state or of a preset is not overwritten
+    // The number of voices of a shared state or of a preset is not overwritten
     if (!stateApplied) {
       cantArmonicos.value = 3
     }
@@ -358,7 +358,7 @@
                     <span class="text-xs text-500">Mode</span>
                     <Dropdown
                       v-model="mappingMode" :options="mappingModes" option-label="label"
-                      option-value="value" class="w-11rem" title="How partial numbers are mapped to frequencies"
+                      option-value="value" class="w-14rem" title="Fibonacci and Harmonic multiply the fundamental (ratios); Legacy adds the Fibonacci distance in Hz"
                       aria-label="Mapping mode"
                     />
                   </div>
@@ -391,14 +391,14 @@
                   />
                 </div>
 
-                <!-- Harmonics Count -->
+                <!-- Voices (the fundamental included) -->
                 <div class="flex flex-column items-center gap-3 border-1 surface-border p-3 border-round">
                   <Slider
                     v-model="cantArmonicos" :min="1" :max="maxArmonicos" orientation="vertical" class="h-12rem"
-                    aria-label="Number of partials"
+                    aria-label="Number of voices, including the fundamental"
                   />
                   <div class="text-center">
-                    <span class="block font-medium text-sm mb-1">Count</span>
+                    <span class="block font-medium text-sm mb-1">Voices</span>
                     <span class="block text-xs text-500">
                       {{ armonicos.length }}<span v-if="droppedPartials > 0"> / {{ cantArmonicos }}</span>
                     </span>
@@ -407,7 +407,7 @@
                     </span>
                   </div>
                   <LfoControl
-                    v-model="lfos.cantArmonicos" label="Count LFO" :param-min="1" :param-max="10"
+                    v-model="lfos.cantArmonicos" label="Voices LFO" :param-min="1" :param-max="10"
                     :lfo-phase="lfoPhases.cantArmonicos" :lfo-phase-time="lfoPhaseTimes.cantArmonicos"
                     class="w-14rem"
                   />

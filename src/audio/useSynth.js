@@ -22,9 +22,9 @@ function currentSampleRate() {
 export function useSynth() {
   // Mapping mode: how the partial number is turned into a frequency
   const mappingModes = [
-    { label: 'Fibonacci', value: 'fibonacci' },
-    { label: 'Harmonic', value: 'harmonic' },
-    { label: 'Legacy (additive)', value: 'legacy' }
+    { label: 'Fibonacci ratios (×)', value: 'fibonacci' },
+    { label: 'Harmonic series (×)', value: 'harmonic' },
+    { label: 'Legacy distance (+)', value: 'legacy' }
   ]
   const mappingMode = ref('fibonacci')
 
